@@ -9,6 +9,9 @@ license = "Apache-2.0"
 homepage = "https://github.com/retrokiller543/nexsock2"
 repository = "https://github.com/retrokiller543/nexsock2"
 
+[workspace.dependencies]
+tikv-jemallocator = "0.6.0"
+
 [profile.release]
 lto = true
 codegen-units = 1
