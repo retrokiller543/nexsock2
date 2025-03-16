@@ -1,0 +1,10 @@
+[workspace]
+members = []
+
+[workspace.package]
+version = "1.0.0-7"
+edition = "2021"
+authors = ["Emil Schütt <emil.schutt@gmail.com>"]
+license = "Apache-2.0"
+homepage = "https://github.com/retrokiller543/nexsock"
+repository = "https://github.com/retrokiller543/nexsock"
