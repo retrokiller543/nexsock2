@@ -4,7 +4,7 @@ use crate::constants::HEADER_SIZE;
 use crate::error::ProtocolResult;
 use crate::header::Header;
 
-pub trait HeaderParser {
+pub trait HeaderDeserializer {
     fn parse(bytes: &[u8]) -> Option<Header>;
 
     fn parse_bytes(bytes: &mut Bytes) -> Option<Header> {
@@ -34,4 +34,8 @@ pub trait HeaderParser {
                 "Failed to parse header"
             ).into())
     }
+}
+
+pub trait HeaderSerializer {
+    fn serialize(header: &Header) -> [u8; HEADER_SIZE];
 }

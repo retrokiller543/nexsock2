@@ -3,7 +3,7 @@ use futures::AsyncRead;
 use crate::constants::HEADER_SIZE;
 use crate::error::ProtocolResult;
 use crate::message_flags::MessageFlags;
-use crate::traits::header::HeaderParser;
+use crate::traits::header::{HeaderDeserializer, HeaderSerializer};
 
 pub mod simd;
 pub mod standard;
@@ -25,7 +25,7 @@ impl Header {
         Self { id, version, flags, payload_len, sequence_number }
     }
 
-    pub fn to_bytes(&self) -> [u8; HEADER_SIZE] {
+    /*pub fn to_bytes(&self) -> [u8; HEADER_SIZE] {
         let mut buffer = [0u8; HEADER_SIZE];
 
         buffer[0] = ((self.id & Self::LAST_SIX_BITS) << 2) | (self.version & Self::LAST_TWO_BITS);
@@ -48,17 +48,21 @@ impl Header {
         buffer[14] = self.sequence_number as u8;
         
         buffer
+    }*/
+
+    pub fn to_bytes<S: HeaderSerializer>(&self) -> [u8; HEADER_SIZE] {
+        S::serialize(self)
     }
     
-    pub fn parse<P: HeaderParser>(bytes: &[u8]) -> Option<Self> {
+    pub fn parse<P: HeaderDeserializer>(bytes: &[u8]) -> Option<Self> {
         P::parse(bytes)
     }
 
-    pub fn parse_bytes<P: HeaderParser>(bytes: &mut Bytes) -> Option<Self> {
+    pub fn parse_bytes<P: HeaderDeserializer>(bytes: &mut Bytes) -> Option<Self> {
         P::parse_bytes(bytes)
     }
 
-    pub async fn read_header<P: HeaderParser, R: AsyncRead + Unpin>(reader: &mut R) -> ProtocolResult<Self> {
+    pub async fn read_header<P: HeaderDeserializer, R: AsyncRead + Unpin>(reader: &mut R) -> ProtocolResult<Self> {
         P::read_header(reader).await
     }
 
@@ -85,6 +89,7 @@ impl Header {
 
 #[cfg(test)]
 mod tests {
+    use crate::header::simd::SimdHeaderParser;
     use crate::header::standard::StandardHeaderParser;
     use super::*;
 
@@ -98,7 +103,7 @@ mod tests {
 
         let header = Header::new(id, version, flags, payload_len, sequence_number);
 
-        let header_bytes = header.to_bytes();
+        let header_bytes = header.to_bytes::<StandardHeaderParser>();
         
         let expected_bytes = [
             0x06,                         // id and version combined
@@ -120,7 +125,7 @@ mod tests {
         let sequence_number = 1;
 
         let original_header = Header::new(id, version, flags, payload_len, sequence_number);
-        let bytes = original_header.to_bytes();
+        let bytes = original_header.to_bytes::<StandardHeaderParser>();
         let recovered_header = Header::parse::<StandardHeaderParser>(&mut Bytes::from_owner(bytes)).unwrap();
 
         assert_eq!(recovered_header.id, id);
