@@ -1,14 +1,9 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![cfg_attr(feature = "simd", feature(portable_simd))]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod frame;
+pub mod error;
+mod traits;
+pub mod transport;
+pub mod constants;
+pub mod message_flags;
+pub mod header;
