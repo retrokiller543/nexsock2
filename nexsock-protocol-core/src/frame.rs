@@ -1,10 +1,10 @@
 use crate::traits::MessageBody;
 use bincode::{Decode, Encode};
 
-#[derive(Debug, /*Default, Clone, */PartialEq, Eq, Ord, PartialOrd, Hash, Encode, Decode)]
+#[derive(Debug, /*Default, Clone, */ PartialEq, Eq, Ord, PartialOrd, Hash, Encode, Decode)]
 pub struct Frame<const N: usize, T: MessageBody> {
     header: [u8; N],
-    body: T
+    body: T,
 }
 
 impl<const N: usize, T: MessageBody> Frame<N, T> {

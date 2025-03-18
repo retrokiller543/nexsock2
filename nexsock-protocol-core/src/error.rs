@@ -8,5 +8,5 @@ pub enum ProtocolError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Decode(#[from] DecodeError)
+    Decode(#[from] DecodeError),
 }

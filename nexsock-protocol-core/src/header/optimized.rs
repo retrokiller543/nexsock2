@@ -14,20 +14,29 @@ impl HeaderDeserializer for OptimizedHeaderParser {
 
         unsafe {
             let header_bytes = std::ptr::read_unaligned(buf.as_ptr() as *const [u8; HEADER_SIZE]);
-            
+
             let first_byte = header_bytes[0];
             let id = (first_byte & Header::LAST_SIX_BITS) >> 2;
             let version = first_byte & Header::LAST_TWO_BITS;
-            
+
             let flags = u16::from_be_bytes([header_bytes[1], header_bytes[2]]);
-            
+
             let payload_len = u32::from_be_bytes([
-                header_bytes[3], header_bytes[4], header_bytes[5], header_bytes[6]
+                header_bytes[3],
+                header_bytes[4],
+                header_bytes[5],
+                header_bytes[6],
             ]);
-            
+
             let sequence_number = u64::from_be_bytes([
-                header_bytes[7], header_bytes[8], header_bytes[9], header_bytes[10],
-                header_bytes[11], header_bytes[12], header_bytes[13], header_bytes[14]
+                header_bytes[7],
+                header_bytes[8],
+                header_bytes[9],
+                header_bytes[10],
+                header_bytes[11],
+                header_bytes[12],
+                header_bytes[13],
+                header_bytes[14],
             ]);
 
             Some(Header::new(
@@ -35,7 +44,7 @@ impl HeaderDeserializer for OptimizedHeaderParser {
                 version,
                 MessageFlags::from(flags),
                 payload_len,
-                sequence_number
+                sequence_number,
             ))
         }
     }

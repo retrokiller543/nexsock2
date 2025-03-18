@@ -26,7 +26,9 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Transport<R, W> {
 
         self.reader.read_exact(&mut buf).await?;
 
-        let header = Header::parse::<crate::header::standard::StandardHeaderParser>(&mut buf.freeze()).unwrap();
+        let header =
+            Header::parse::<crate::header::standard::StandardHeaderParser>(&mut buf.freeze())
+                .unwrap();
 
         if header.flags().contains(MessageFlags::HAS_PAYLOAD) && header.payload_len() > 0 {
             self.read_body(header).await
@@ -44,8 +46,10 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Transport<R, W> {
 
         let bytes = buffer.freeze();
         let config = bincode::config::standard().with_big_endian();
-        
-        bincode::decode_from_slice(&bytes, config).map_err(Into::into).map(|(data, _)| data)
+
+        bincode::decode_from_slice(&bytes, config)
+            .map_err(Into::into)
+            .map(|(data, _)| data)
     }
 
     async fn read_magic(&mut self) -> ProtocolResult<()> {
@@ -53,10 +57,9 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Transport<R, W> {
         self.reader.read_exact(&mut magic).await?;
 
         if &magic != b"NEX\0" {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid protocol magic bytes",
-            ).into());
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidData, "Invalid protocol magic bytes").into(),
+            );
         }
 
         Ok(())
@@ -82,10 +85,7 @@ pub(crate) mod tests {
 
     impl MockReader {
         pub(crate) fn new(data: Vec<u8>) -> Self {
-            Self {
-                data,
-                position: 0,
-            }
+            Self { data, position: 0 }
         }
     }
 
@@ -115,9 +115,7 @@ pub(crate) mod tests {
 
     impl MockWriter {
         fn new() -> Self {
-            Self {
-                data: Vec::new(),
-            }
+            Self { data: Vec::new() }
         }
 
         fn written_data(&self) -> &[u8] {
@@ -152,7 +150,7 @@ pub(crate) mod tests {
     }
 
     impl MessageBody for TestMessage {}
-/*
+    /*
     #[tokio::test]
     async fn test_read_message() {
         // Create test data

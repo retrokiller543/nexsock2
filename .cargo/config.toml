@@ -1,4 +1,4 @@
 [build]
 rustflags = [
-    #"-Ctarget-cpu=native",
+    "-Ctarget-cpu=native",
 ]

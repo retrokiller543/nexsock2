@@ -8,37 +8,48 @@ use crate::traits::header::{HeaderDeserializer, HeaderSerializer};
 use bytes::{Buf, Bytes};
 use std::simd::SupportedLaneCount;
 
+/// A heavily optimized parser for `aarch64` targets, it's not recommended you need to get every last bit of performance
+/// by leveraging aarch64 neon.
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 pub struct Aarch64NeonHeaderParser;
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 impl HeaderSerializer for Aarch64NeonHeaderParser {
     #[inline]
     fn serialize(header: &Header) -> [u8; HEADER_SIZE] {
         use std::arch::aarch64::*;
 
         unsafe {
-            let mut buffer = std::mem::MaybeUninit::<[u8; HEADER_SIZE]>::uninit();
-            let buf_ptr = buffer.as_mut_ptr() as *mut u8;
+            // First create a 128-bit NEON vector and fill it with our data
+            // This allows us to do a single write at the end
+            let mut tmp_buf = [0u8; 16]; // Use 16 bytes for alignment
 
-            *buf_ptr = ((header.id & Header::LAST_SIX_BITS) << 2) | (header.version & Header::LAST_TWO_BITS);
+            // Pack fields with proper endianness
+            tmp_buf[0] = ((header.id & Header::LAST_SIX_BITS) << 2)
+                | (header.version & Header::LAST_TWO_BITS);
 
             let flags_be = (*header.flags).to_be();
-            std::ptr::write_unaligned(buf_ptr.add(1) as *mut u16, flags_be);
+            std::ptr::write_unaligned(tmp_buf.as_mut_ptr().add(1) as *mut u16, flags_be);
 
             let payload_be = header.payload_len.to_be();
-            std::ptr::write_unaligned(buf_ptr.add(3) as *mut u32, payload_be);
+            std::ptr::write_unaligned(tmp_buf.as_mut_ptr().add(3) as *mut u32, payload_be);
 
             let seq_be = header.sequence_number.to_be();
+            std::ptr::write_unaligned(tmp_buf.as_mut_ptr().add(7) as *mut u64, seq_be);
 
-            let seq_neon = vld1_u8((&seq_be as *const u64) as *const u8);
-            vst1_u8(buf_ptr.add(7), seq_neon);
+            // Load the prepared data into a NEON register
+            let neon_data = vld1q_u8(tmp_buf.as_ptr());
+
+            // Write to final buffer in one NEON operation
+            let mut buffer = std::mem::MaybeUninit::<[u8; HEADER_SIZE]>::uninit();
+            vst1q_u8(buffer.as_mut_ptr() as *mut u8, neon_data);
 
             buffer.assume_init()
         }
     }
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 impl HeaderDeserializer for Aarch64NeonHeaderParser {
     #[inline]
     fn parse(buf: &[u8]) -> Option<Header> {
@@ -49,37 +60,36 @@ impl HeaderDeserializer for Aarch64NeonHeaderParser {
         }
 
         unsafe {
-            // Extract first byte for id and version
-            let first_byte = *buf.as_ptr();
-            let id = (first_byte & Header::LAST_SIX_BITS) >> 2;
+            let neon_data = vld1q_u8(buf.as_ptr());
+
+            let mut tmp_buf = [0u8; HEADER_SIZE];
+            vst1q_u8(tmp_buf.as_mut_ptr(), neon_data);
+
+            let first_byte = tmp_buf[0];
+            let id = (first_byte >> 2) & Header::LAST_SIX_BITS;
             let version = first_byte & Header::LAST_TWO_BITS;
 
-            // Read flags (2 bytes) - avoid misalignment by reading bytes directly
-            let flags = u16::from_be_bytes([*buf.as_ptr().add(1), *buf.as_ptr().add(2)]);
+            let flags = u16::from_be_bytes([tmp_buf[1], tmp_buf[2]]);
 
-            // Read payload length (4 bytes) - avoid misalignment by reading bytes directly
-            let payload_len = u32::from_be_bytes([
-                *buf.as_ptr().add(3),
-                *buf.as_ptr().add(4),
-                *buf.as_ptr().add(5),
-                *buf.as_ptr().add(6)
+            let payload_len = u32::from_be_bytes([tmp_buf[3], tmp_buf[4], tmp_buf[5], tmp_buf[6]]);
+
+            let sequence_number = u64::from_be_bytes([
+                tmp_buf[7],
+                tmp_buf[8],
+                tmp_buf[9],
+                tmp_buf[10],
+                tmp_buf[11],
+                tmp_buf[12],
+                tmp_buf[13],
+                tmp_buf[14],
             ]);
-
-            // Use NEON for sequence number (8 bytes)
-            let seq_ptr = buf.as_ptr().add(7);
-            let seq_neon = vld1_u8(seq_ptr);
-
-            // Convert sequence number back to native endianness
-            let mut seq_bytes = [0u8; 8];
-            vst1_u8(seq_bytes.as_mut_ptr(), seq_neon);
-            let sequence_number = u64::from_be_bytes(seq_bytes);
 
             Some(Header::new(
                 id,
                 version,
                 MessageFlags::from(flags),
                 payload_len,
-                sequence_number
+                sequence_number,
             ))
         }
     }
@@ -93,13 +103,13 @@ mod tests {
     use crate::header::tests::{test_deserializer, test_serializer};
 
     #[test]
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     fn test_aarch64_neon_serialize() {
         test_serializer::<Aarch64NeonHeaderParser>()
     }
 
     #[test]
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     fn test_aarch64_neon_deserialize() {
         test_deserializer::<Aarch64NeonHeaderParser>()
     }

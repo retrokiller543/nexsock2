@@ -25,19 +25,15 @@ pub trait HeaderDeserializer {
         Some(header)
     }
 
-    async fn read_header<R: AsyncRead + Unpin>(
-        reader: &mut R
-    ) -> ProtocolResult<Header> {
+    async fn read_header<R: AsyncRead + Unpin>(reader: &mut R) -> ProtocolResult<Header> {
         let mut buf = BytesMut::with_capacity(HEADER_SIZE);
         buf.resize(HEADER_SIZE, 0);
 
         AsyncReadExt::read_exact(reader, &mut buf).await?;
 
-        Self::parse(&buf)
-            .ok_or_else(|| std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Failed to parse header"
-            ).into())
+        Self::parse(&buf).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to parse header").into()
+        })
     }
 }
 
