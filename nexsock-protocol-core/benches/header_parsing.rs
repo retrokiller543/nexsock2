@@ -1,14 +1,18 @@
-use bytes::Bytes;
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput, BenchmarkId};
-use tikv_jemallocator::Jemalloc;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use nexsock_protocol_core::constants::HEADER_SIZE;
+#[cfg(feature = "simd")]
+use nexsock_protocol_core::header::optimized::OptimizedHeaderParser;
+#[cfg(all(feature = "simd", target_arch = "aarch64"))]
+use nexsock_protocol_core::header::simd::Aarch64NeonHeaderParser;
+use nexsock_protocol_core::header::standard::StandardHeaderParser;
 use nexsock_protocol_core::header::Header;
 use nexsock_protocol_core::message_flags::MessageFlags;
-#[cfg(feature = "simd")]
-use nexsock_protocol_core::header::simd::{Simd2HeaderParser, SimdHeaderParser};
-use nexsock_protocol_core::header::standard::StandardHeaderParser;
+use tikv_jemallocator::Jemalloc;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+const SAMPLE_SIZE: usize = 10000;
+const NOISE_THRESHOLD: f64 = 0.04;
 
 // Create more realistic test data with varying properties
 fn create_test_headers() -> Vec<Header> {
@@ -46,8 +50,8 @@ pub fn header_from_byte_parsing_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Header Deserialization");
 
     // Configure the benchmark
-    group.sample_size(1000)
-        .noise_threshold(0.04)
+    group.sample_size(SAMPLE_SIZE)
+        .noise_threshold(NOISE_THRESHOLD)
         .measurement_time(std::time::Duration::from_secs(5));
 
     for (i, header) in headers.iter().enumerate() {
@@ -57,24 +61,23 @@ pub fn header_from_byte_parsing_benchmark(c: &mut Criterion) {
         // Set throughput to measure bytes processed per second
         group.throughput(Throughput::Bytes(header_size));
         
-        #[cfg(feature = "simd")]
         group.bench_with_input(
-            BenchmarkId::new("SIMD", format!("case_{}", i)),
+            BenchmarkId::new("Optimized", format!("case_{}", i)),
             &header_bytes,
             |b, bytes| {
                 b.iter(|| {
-                    black_box(Header::parse::<SimdHeaderParser>(black_box(bytes)))
+                    black_box(Header::parse::<OptimizedHeaderParser>(black_box(bytes)))
                 })
             }
         );
 
-        #[cfg(feature = "simd")]
+        #[cfg(all(feature = "simd", target_arch = "aarch64"))]
         group.bench_with_input(
-            BenchmarkId::new("SIMDv2", format!("case_{}", i)),
+            BenchmarkId::new("Aarch64 Neon", format!("case_{}", i)),
             &header_bytes,
             |b, bytes| {
                 b.iter(|| {
-                    black_box(Header::parse::<Simd2HeaderParser>(black_box(bytes)))
+                    black_box(Header::parse::<Aarch64NeonHeaderParser>(black_box(bytes)))
                 })
             }
         );
@@ -99,21 +102,19 @@ pub fn header_to_byte_conversion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Header Serialization");
 
     // Configure the benchmark
-    group.sample_size(1000)
-        .noise_threshold(0.04)
-        .measurement_time(std::time::Duration::from_secs(5));
+    group.sample_size(SAMPLE_SIZE)
+        .noise_threshold(NOISE_THRESHOLD)
+        .measurement_time(std::time::Duration::from_secs(5))
+        .throughput(Throughput::Bytes(HEADER_SIZE as u64));
 
     for (i, header) in headers.iter().enumerate() {
-        // Set throughput based on expected output size
-        group.throughput(Throughput::Bytes(15)); // HEADER_SIZE
-
-        #[cfg(feature = "simd")]
+        #[cfg(all(feature = "simd", target_arch = "aarch64"))]
         group.bench_with_input(
-            BenchmarkId::new("SIMD", format!("case_{}", i)),
+            BenchmarkId::new("Aarch64 Neon", format!("case_{}", i)),
             header,
             |b, header| {
                 b.iter(|| {
-                    black_box(black_box(header).to_bytes::<SimdHeaderParser>())
+                    black_box(black_box(header).to_bytes::<Aarch64NeonHeaderParser>())
                 })
             }
         );
@@ -137,31 +138,55 @@ pub fn header_roundtrip_benchmark(c: &mut Criterion) {
     let headers = create_test_headers();
     let mut group = c.benchmark_group("Header Roundtrip");
 
-    group.sample_size(1000)
-        .noise_threshold(0.04)
-        .measurement_time(std::time::Duration::from_secs(5));
+    group.sample_size(SAMPLE_SIZE)
+        .noise_threshold(NOISE_THRESHOLD)
+        .measurement_time(std::time::Duration::from_secs(5))
+        .throughput(Throughput::Bytes((HEADER_SIZE * 2) as u64));
 
     for (i, header) in headers.iter().enumerate() {
-        #[cfg(feature = "simd")]
+        #[cfg(all(feature = "simd", target_arch = "aarch64"))]
         group.bench_with_input(
-            BenchmarkId::new("SIMD", format!("case_{}", i)),
+            BenchmarkId::new("Aarch64 Neon", format!("case_{}", i)),
             header,
             |b, header| {
                 b.iter(|| {
-                    let bytes = black_box(header).to_bytes::<SimdHeaderParser>();
-                    black_box(Header::parse::<SimdHeaderParser>(black_box(&bytes)))
+                    let bytes = black_box(header).to_bytes::<Aarch64NeonHeaderParser>();
+                    black_box(Header::parse::<Aarch64NeonHeaderParser>(black_box(&bytes)))
+                })
+            }
+        );
+        
+        #[cfg(all(feature = "simd", target_arch = "aarch64"))]
+        group.bench_with_input(
+            BenchmarkId::new("Optimized + Aarch64 Neon", format!("case_{}", i)),
+            header,
+            |b, header| {
+                b.iter(|| {
+                    let bytes = black_box(header).to_bytes::<Aarch64NeonHeaderParser>();
+                    black_box(Header::parse::<OptimizedHeaderParser>(black_box(&bytes)))
                 })
             }
         );
 
-        #[cfg(feature = "simd")]
+        #[cfg(all(feature = "simd", target_arch = "aarch64"))]
         group.bench_with_input(
-            BenchmarkId::new("SIMDv2", format!("case_{}", i)),
-            &header,
+            BenchmarkId::new("Standard + Aarch64 Neon", format!("case_{}", i)),
+            header,
             |b, header| {
                 b.iter(|| {
-                    let bytes = black_box(header).to_bytes::<SimdHeaderParser>();
-                    black_box(Header::parse::<SimdHeaderParser>(black_box(&bytes)))
+                    let bytes = black_box(header).to_bytes::<Aarch64NeonHeaderParser>();
+                    black_box(Header::parse::<StandardHeaderParser>(black_box(&bytes)))
+                })
+            }
+        );
+        
+        group.bench_with_input(
+            BenchmarkId::new("Optimized + Standard", format!("case_{}", i)),
+            header,
+            |b, header| {
+                b.iter(|| {
+                    let bytes = black_box(header).to_bytes::<StandardHeaderParser>();
+                    black_box(Header::parse::<OptimizedHeaderParser>(black_box(&bytes)))
                 })
             }
         );

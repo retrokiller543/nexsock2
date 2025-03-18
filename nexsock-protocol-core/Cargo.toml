@@ -15,12 +15,13 @@ futures.workspace = true
 bincode.workspace = true
 thiserror.workspace = true
 tokio-util = "0.7.14"
+wide = "0.7.32"
 
 [dev-dependencies]
 criterion = "0.5.1"
 
 [features]
-default = []
+default = ["simd"]
 simd = []
 
 [[bench]]

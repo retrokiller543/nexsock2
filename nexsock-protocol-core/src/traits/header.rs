@@ -1,8 +1,13 @@
-use bytes::{Buf, Bytes, BytesMut};
-use futures::{AsyncRead, AsyncReadExt};
 use crate::constants::HEADER_SIZE;
 use crate::error::ProtocolResult;
 use crate::header::Header;
+use bytes::{Buf, Bytes, BytesMut};
+use futures::{AsyncRead, AsyncReadExt};
+
+pub trait HeaderParser {
+    type Serializer: HeaderSerializer;
+    type Deserializer: HeaderDeserializer;
+}
 
 pub trait HeaderDeserializer {
     fn parse(bytes: &[u8]) -> Option<Header>;

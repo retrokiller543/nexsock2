@@ -1,13 +1,13 @@
-use std::io;
-use bytes::{Bytes, BytesMut};
-use futures::{AsyncRead, AsyncReadExt};
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::constants::HEADER_SIZE;
 use crate::error::ProtocolResult;
 use crate::frame::Frame;
 use crate::header::Header;
 use crate::message_flags::MessageFlags;
 use crate::traits::MessageBody;
+use bytes::BytesMut;
+use futures::{AsyncRead, AsyncReadExt};
+use std::io;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 pub struct Transport<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> {
     reader: R,
@@ -70,13 +70,9 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Transport<R, W> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use bincode::{Decode, Encode};
     use std::pin::Pin;
     use std::task::{Context, Poll};
-    use futures::task::noop_waker;
-    use std::io::{Error, ErrorKind};
-    use bincode::{Decode, Encode};
-    use bytes::BufMut;
-    use tokio::io::ReadBuf;
 
     // Mock structures for testing
     pub(crate) struct MockReader {

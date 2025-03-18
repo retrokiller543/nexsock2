@@ -1,5 +1,5 @@
-use bincode::{Decode, Encode};
 use crate::traits::MessageBody;
+use bincode::{Decode, Encode};
 
 #[derive(Debug, /*Default, Clone, */PartialEq, Eq, Ord, PartialOrd, Hash, Encode, Decode)]
 pub struct Frame<const N: usize, T: MessageBody> {

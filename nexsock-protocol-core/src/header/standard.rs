@@ -1,14 +1,15 @@
+use crate::traits::header::HeaderSerializer;
 use crate::{
-    message_flags::MessageFlags,
-    header::Header,
     constants::HEADER_SIZE,
+    header::Header,
+    message_flags::MessageFlags,
     traits::header::HeaderDeserializer
 };
-use crate::traits::header::HeaderSerializer;
 
 pub struct StandardHeaderParser;
 
 impl HeaderDeserializer for StandardHeaderParser {
+    #[inline]
     fn parse(bytes: &[u8]) -> Option<Header> {
         if bytes.len() < HEADER_SIZE {
             return None;
@@ -45,27 +46,48 @@ impl HeaderDeserializer for StandardHeaderParser {
 }
 
 impl HeaderSerializer for StandardHeaderParser {
+    #[inline]
     fn serialize(header: &Header) -> [u8; HEADER_SIZE] {
-        let mut buffer = [0; HEADER_SIZE];
-        buffer[0] = ((header.id & Header::LAST_SIX_BITS) << 2) | (header.version & Header::LAST_TWO_BITS);
+        unsafe {
+            // Initialize buffer without zero-initialization overhead
+            let mut buffer = std::mem::MaybeUninit::<[u8; HEADER_SIZE]>::uninit();
+            let buf_ptr = buffer.as_mut_ptr() as *mut u8;
 
-        buffer[1] = (*header.flags >> 8) as u8;
-        buffer[2] = *header.flags as u8;
+            // First byte: id and version packed together
+            *buf_ptr = ((header.id & Header::LAST_SIX_BITS) << 2) | (header.version & Header::LAST_TWO_BITS);
 
-        buffer[3] = (header.payload_len >> 24) as u8;
-        buffer[4] = (header.payload_len >> 16) as u8;
-        buffer[5] = (header.payload_len >> 8) as u8;
-        buffer[6] = header.payload_len as u8;
+            // For maximum performance on modern CPUs, use direct unaligned writes
+            // instead of manual byte manipulation + SIMD operations
 
-        buffer[7] = (header.sequence_number >> 56) as u8;
-        buffer[8] = (header.sequence_number >> 48) as u8;
-        buffer[9] = (header.sequence_number >> 40) as u8;
-        buffer[10] = (header.sequence_number >> 32) as u8;
-        buffer[11] = (header.sequence_number >> 24) as u8;
-        buffer[12] = (header.sequence_number >> 16) as u8;
-        buffer[13] = (header.sequence_number >> 8) as u8;
-        buffer[14] = header.sequence_number as u8;
-        
-        buffer
+            // Write flags (2 bytes) directly as a single u16
+            let flags_be = (*header.flags).to_be();
+            std::ptr::write_unaligned(buf_ptr.add(1) as *mut u16, flags_be);
+
+            // Write payload length (4 bytes) directly as a single u32
+            let payload_be = header.payload_len.to_be();
+            std::ptr::write_unaligned(buf_ptr.add(3) as *mut u32, payload_be);
+
+            // Write sequence number (8 bytes) directly as a single u64
+            let seq_be = header.sequence_number.to_be();
+            std::ptr::write_unaligned(buf_ptr.add(7) as *mut u64, seq_be);
+
+            buffer.assume_init()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::header::tests::{test_deserializer, test_serializer};
+
+    #[test]
+    fn test_standard_serializer() {
+        test_serializer::<StandardHeaderParser>()
+    }
+
+    #[test]
+    fn test_standard_deserializer() {
+        test_deserializer::<StandardHeaderParser>()
     }
 }
